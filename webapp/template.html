@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Прописи</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #1d1d1f);
+    --hint: var(--tg-theme-hint-color, #8a8a8e);
+    --card: var(--tg-theme-secondary-bg-color, #f2f2f5);
+    --accent: var(--tg-theme-button-color, #c8372d);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --ok: #2e9d57;
+    --bad: #d2483c;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Noto Sans SC", sans-serif; }
+  main { max-width: 440px; margin: 0 auto; padding: 16px 16px 28px; }
+  h1 { font-size: 20px; margin: 4px 0 4px; }
+  .sub { color: var(--hint); font-size: 14px; margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .grid button { aspect-ratio: 1; border: 0; border-radius: 12px; background: var(--card);
+    color: var(--text); font-size: 17px; font-weight: 600; }
+  .grid button:active { transform: scale(.96); }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .back { border: 0; background: none; color: var(--accent); font-size: 15px; padding: 4px 0; }
+  .count { color: var(--hint); font-size: 14px; }
+  .word { text-align: center; margin: 4px 0 10px; }
+  .word .tr { font-size: 18px; font-weight: 600; }
+  .word .py { color: var(--hint); font-size: 16px; margin-top: 2px; }
+  .chars { display: flex; justify-content: center; gap: 6px; margin: 8px 0 12px; }
+  .chars span { min-width: 36px; height: 36px; border-radius: 8px; background: var(--card);
+    display: grid; place-items: center; font-size: 20px; color: var(--hint); }
+  .chars span.cur { outline: 2px solid var(--accent); color: var(--text); }
+  .chars span.ok { color: var(--ok); }
+  .chars span.bad { color: var(--bad); }
+  .pad { position: relative; width: min(300px, 82vw); aspect-ratio: 1; margin: 0 auto;
+    border-radius: 14px; background: var(--card); }
+  .pad svg.guide { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .pad .writer { position: absolute; inset: 0; }
+  .msg { text-align: center; min-height: 24px; margin: 10px 0 6px; font-size: 15px; }
+  .msg.ok { color: var(--ok); } .msg.bad { color: var(--bad); }
+  .row { display: flex; gap: 8px; margin-top: 8px; }
+  .btn { flex: 1; border: 0; border-radius: 12px; padding: 13px 10px; font-size: 15px; font-weight: 600;
+    background: var(--card); color: var(--text); }
+  .btn.main { background: var(--accent); color: var(--accent-text); }
+  .btn:disabled { opacity: .45; }
+  .list { margin: 12px 0; padding: 0; list-style: none; }
+  .list li { display: flex; justify-content: space-between; padding: 10px 12px; border-radius: 10px;
+    background: var(--card); margin-bottom: 6px; }
+  .list .hz { font-size: 20px; }
+  .big { font-size: 34px; text-align: center; margin: 8px 0 0; font-weight: 700; }
+  .note { color: var(--hint); font-size: 13px; text-align: center; margin-top: 12px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <!-- выбор урока -->
+  <section id="s-lessons">
+    <h1>✍️ Прописи</h1>
+    <p class="sub">Выбери урок. Сначала можно посмотреть порядок черт, потом написать иероглиф пальцем.</p>
+    <div class="grid" id="lessons"></div>
+  </section>
+
+  <!-- тренировка -->
+  <section id="s-practice" class="hidden">
+    <div class="top">
+      <button class="back" id="to-lessons">‹ Уроки</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="word">
+      <div class="tr" id="tr"></div>
+      <div class="py" id="py"></div>
+    </div>
+    <div class="chars" id="chars"></div>
+    <div class="pad">
+      <svg class="guide" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <g stroke="currentColor" stroke-width=".4" stroke-dasharray="2 2" fill="none" opacity=".35">
+          <line x1="0" y1="50" x2="100" y2="50"/><line x1="50" y1="0" x2="50" y2="100"/>
+          <line x1="0" y1="0" x2="100" y2="100"/><line x1="100" y1="0" x2="0" y2="100"/>
+        </g>
+      </svg>
+      <div class="writer" id="writer"></div>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="row">
+      <button class="btn" id="show">👀 Порядок черт</button>
+      <button class="btn" id="again">↺ Заново</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="finish">Завершить</button>
+      <button class="btn main" id="next" disabled>Дальше →</button>
+    </div>
+  </section>
+
+  <!-- итог -->
+  <section id="s-done" class="hidden">
+    <h1>Готово!</h1>
+    <p class="big" id="score"></p>
+    <ul class="list" id="results"></ul>
+    <div class="row"><button class="btn main" id="send">Отправить в бота</button></div>
+    <div class="row"><button class="btn" id="restart">Ещё урок</button></div>
+    <p class="note" id="send-note"></p>
+  </section>
+</main>
+
+<script>/*HANZI_WRITER*/</script>
+<script>
+const WORDS = /*WORDS*/;
+const CHARS = /*CHARDATA*/;
+const HINT_AFTER = 3;          // после стольких ошибок в черте бот подсвечивает её
+const OK_LIMIT = 3;            // иероглиф засчитан, если ошибок меньше
+
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const $ = id => document.getElementById(id);
+const show = id => ["s-lessons", "s-practice", "s-done"].forEach(s => $(s).classList.toggle("hidden", s !== id));
+const cjk = s => [...s].filter(ch => CHARS[ch]);
+
+let lesson = 0, list = [], wi = 0, ci = 0, writer = null, results = [], charState = [];
+
+function buildLessons() {
+  const box = $("lessons");
+  const nums = [...new Set(WORDS.map(w => w.l))].sort((a, b) => a - b);
+  for (const n of nums) {
+    const b = document.createElement("button");
+    b.textContent = n;
+    b.onclick = () => startLesson(n);
+    box.appendChild(b);
+  }
+}
+
+function startLesson(n) {
+  lesson = n;
+  list = WORDS.filter(w => w.l === n && cjk(w.h).length);
+  results = []; wi = 0;
+  show("s-practice");
+  openWord();
+}
+
+function openWord() {
+  const w = list[wi];
+  ci = 0;
+  charState = cjk(w.h).map(() => ({ mistakes: 0, done: false }));
+  $("count").textContent = `${wi + 1} из ${list.length}`;
+  $("tr").textContent = w.t;
+  $("py").textContent = w.p;
+  $("next").disabled = true;
+  $("next").textContent = wi + 1 < list.length ? "Дальше →" : "Итог";
+  drawChars();
+  startChar();
+}
+
+function drawChars() {
+  const chars = cjk(list[wi].h);
+  $("chars").innerHTML = "";
+  chars.forEach((ch, i) => {
+    const s = document.createElement("span");
+    const st = charState[i];
+    s.textContent = st.done ? ch : "·";
+    if (i === ci && !st.done) s.className = "cur";
+    else if (st.done) s.className = st.mistakes < OK_LIMIT ? "ok" : "bad";
+    $("chars").appendChild(s);
+  });
+}
+
+function makeWriter(ch) {
+  $("writer").innerHTML = "";
+  const size = $("writer").clientWidth || 280;
+  const color = getComputedStyle(document.body).getPropertyValue("--text").trim() || "#1d1d1f";
+  writer = HanziWriter.create("writer", ch, {
+    width: size, height: size, padding: 14,
+    showCharacter: false, showOutline: true,
+    strokeColor: color, outlineColor: "rgba(140,140,150,.28)",
+    drawingColor: color, drawingWidth: 26,
+    highlightColor: "#e0a33a", strokeAnimationSpeed: 1.2, delayBetweenStrokes: 220,
+    showHintAfterMisses: HINT_AFTER,
+    charDataLoader: (c, done) => done(CHARS[c]),
+  });
+}
+
+function startChar() {
+  const ch = cjk(list[wi].h)[ci];
+  makeWriter(ch);
+  setMsg("Напиши иероглиф по контуру.");
+  quiz();
+}
+
+function quiz() {
+  const st = charState[ci];
+  st.mistakes = 0;
+  writer.quiz({
+    onMistake: () => { st.mistakes++; if (st.mistakes === HINT_AFTER) setMsg("Подсказка: смотри на подсвеченную черту.", "bad"); },
+    onComplete: () => {
+      st.done = true;
+      const good = st.mistakes < OK_LIMIT;
+      setMsg(good ? "✅ Отлично!" : `Получилось, ошибок: ${st.mistakes}. Попробуй ещё раз или иди дальше.`, good ? "ok" : "bad");
+      if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(good ? "success" : "warning");
+      drawChars();
+      const chars = cjk(list[wi].h);
+      if (ci + 1 < chars.length) {
+        setTimeout(() => { ci++; drawChars(); startChar(); }, 900);
+      } else {
+        $("next").disabled = false;
+      }
+    },
+  });
+}
+
+function setMsg(text, kind = "") { $("msg").textContent = text; $("msg").className = "msg " + kind; }
+
+function saveWord() {
+  const ok = charState.every(s => s.done && s.mistakes < OK_LIMIT);
+  results.push({ id: list[wi].id, h: list[wi].h, ok, done: charState.every(s => s.done) });
+}
+
+$("show").onclick = () => {
+  if (!writer) return;
+  writer.cancelQuiz();
+  setMsg("Смотри порядок черт…");
+  writer.hideCharacter();
+  writer.animateCharacter({ onComplete: () => setTimeout(() => {
+    writer.hideCharacter(); setMsg("Теперь напиши сам."); quiz();
+  }, 600) });
+};
+$("again").onclick = () => { charState[ci].done = false; writer.cancelQuiz(); startChar(); drawChars(); $("next").disabled = true; };
+$("next").onclick = () => { saveWord(); wi++; wi < list.length ? openWord() : finish(); };
+$("finish").onclick = () => { if (charState.every(s => s.done)) saveWord(); finish(); };
+$("to-lessons").onclick = () => { if (writer) writer.cancelQuiz(); show("s-lessons"); };
+$("restart").onclick = () => show("s-lessons");
+
+function finish() {
+  if (writer) writer.cancelQuiz();
+  const done = results.filter(r => r.done);
+  const good = done.filter(r => r.ok).length;
+  $("score").textContent = done.length ? `${good} из ${done.length}` : "—";
+  $("results").innerHTML = done.map(r =>
+    `<li><span class="hz">${r.h}</span><span>${r.ok ? "✅" : "❌ много ошибок"}</span></li>`).join("");
+  const inBot = !!(tg && tg.initData !== undefined && tg.sendData && tg.platform !== "unknown");
+  $("send").disabled = !done.length;
+  $("send-note").textContent = inBot ? "Результат попадёт в «Мой прогресс»." : "Открой прописи из меню бота, чтобы сохранить результат.";
+  show("s-done");
+}
+
+$("send").onclick = () => {
+  const done = results.filter(r => r.done);
+  const payload = JSON.stringify({ v: 1, lesson, r: done.map(r => [r.id, r.ok ? 1 : 0]) });
+  if (tg && tg.sendData) tg.sendData(payload);   // приложение закроется само
+  else $("send-note").textContent = "Не получилось отправить: прописи открыты не из бота.";
+};
+
+buildLessons();
+const preset = parseInt(new URLSearchParams(location.search).get("lesson") || "0", 10);
+if (preset && WORDS.some(w => w.l === preset)) startLesson(preset);
+</script>
+</body>
+</html>
