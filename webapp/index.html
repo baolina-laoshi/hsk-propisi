@@ -26,6 +26,12 @@
   .grid button { aspect-ratio: 1; border: 0; border-radius: 12px; background: var(--card);
     color: var(--text); font-size: 17px; font-weight: 600; }
   .grid button:active { transform: scale(.96); }
+  .grid button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+  .grid button small { font-size: 11px; font-weight: 500; color: var(--hint); margin-top: 2px; }
+  .grid button.full { background: rgba(46,157,87,.16); }
+  .grid button.full small { color: var(--ok); font-weight: 700; }
+  .grid button.part small { color: #c98a16; }
+  .legend { color: var(--hint); font-size: 13px; margin-top: 12px; line-height: 1.5; }
   .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
   .back { border: 0; background: none; color: var(--accent); font-size: 15px; padding: 4px 0; }
   .count { color: var(--hint); font-size: 14px; }
@@ -65,6 +71,7 @@
     <h1>✍️ Прописи</h1>
     <p class="sub">Выбери урок. Сначала можно посмотреть порядок черт, потом написать иероглиф пальцем.</p>
     <div class="grid" id="lessons"></div>
+    <p class="legend">✓ — урок пройден целиком, 5/12 — пройдено 5 слов из 12.</p>
   </section>
 
   <!-- тренировка -->
@@ -130,12 +137,52 @@ const cjk = s => [...s].filter(ch => CHARS[ch]);
 
 let lesson = 0, list = [], wi = 0, ci = 0, writer = null, results = [], charState = [];
 
+// ---------- отметки о пройденных уроках ----------
+// Хранятся в CloudStorage Telegram (у каждого студента свои, видны на всех его устройствах),
+// вне Telegram — в localStorage браузера. Формат: {"6": {"done": 12, "total": 12, "good": 10}}
+const PROGRESS_KEY = "propisi_progress";
+let progress = {};
+const cloud = tg && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast("6.9") ? tg.CloudStorage : null;
+
+function loadProgress(done) {
+  const parse = raw => { try { progress = JSON.parse(raw || "{}") || {}; } catch (e) { progress = {}; } };
+  if (cloud) {
+    cloud.getItem(PROGRESS_KEY, (err, value) => { parse(err ? null : value); done(); });
+  } else {
+    try { parse(localStorage.getItem(PROGRESS_KEY)); } catch (e) { progress = {}; }
+    done();
+  }
+}
+
+function saveProgress(done) {
+  const raw = JSON.stringify(progress);
+  try { localStorage.setItem(PROGRESS_KEY, raw); } catch (e) {}
+  if (cloud) cloud.setItem(PROGRESS_KEY, raw, () => done && done());
+  else if (done) done();
+}
+
+function recordLesson() {
+  const doneWords = results.filter(r => r.done);
+  if (!doneWords.length) return;
+  const prev = progress[lesson] || { done: 0, total: 0, good: 0 };
+  const cur = { done: doneWords.length, total: list.length, good: doneWords.filter(r => r.ok).length };
+  // оставляем лучший результат: больше пройденных слов, при равенстве — больше без ошибок
+  if (cur.done > prev.done || (cur.done === prev.done && cur.good >= prev.good)) progress[lesson] = cur;
+  else progress[lesson] = { ...prev, total: list.length };
+}
+
 function buildLessons() {
   const box = $("lessons");
+  box.innerHTML = "";
   const nums = [...new Set(WORDS.map(w => w.l))].sort((a, b) => a - b);
   for (const n of nums) {
     const b = document.createElement("button");
-    b.textContent = n;
+    const p = progress[n];
+    const total = WORDS.filter(w => w.l === n && cjk(w.h).length).length;
+    let mark = "";
+    if (p && p.done >= total) { b.className = "full"; mark = "✓"; }
+    else if (p && p.done) { b.className = "part"; mark = `${p.done}/${total}`; }
+    b.innerHTML = `${n}${mark ? `<small>${mark}</small>` : ""}`;
     b.onclick = () => startLesson(n);
     box.appendChild(b);
   }
@@ -237,11 +284,13 @@ $("show").onclick = () => {
 $("again").onclick = () => { charState[ci].done = false; writer.cancelQuiz(); startChar(); drawChars(); $("next").disabled = true; };
 $("next").onclick = () => { saveWord(); wi++; wi < list.length ? openWord() : finish(); };
 $("finish").onclick = () => { if (charState.every(s => s.done)) saveWord(); finish(); };
-$("to-lessons").onclick = () => { if (writer) writer.cancelQuiz(); show("s-lessons"); };
-$("restart").onclick = () => show("s-lessons");
+$("to-lessons").onclick = () => { if (writer) writer.cancelQuiz(); buildLessons(); show("s-lessons"); };
+$("restart").onclick = () => { buildLessons(); show("s-lessons"); };
 
 function finish() {
   if (writer) writer.cancelQuiz();
+  recordLesson();
+  saveProgress();
   const done = results.filter(r => r.done);
   const good = done.filter(r => r.ok).length;
   $("score").textContent = done.length ? `${good} из ${done.length}` : "—";
@@ -256,13 +305,16 @@ function finish() {
 $("send").onclick = () => {
   const done = results.filter(r => r.done);
   const payload = JSON.stringify({ v: 1, lesson, r: done.map(r => [r.id, r.ok ? 1 : 0]) });
-  if (tg && tg.sendData) tg.sendData(payload);   // приложение закроется само
+  // сначала дожидаемся сохранения отметок: sendData закрывает приложение
+  if (tg && tg.sendData) saveProgress(() => tg.sendData(payload));
   else $("send-note").textContent = "Не получилось отправить: прописи открыты не из бота.";
 };
 
-buildLessons();
-const preset = parseInt(new URLSearchParams(location.search).get("lesson") || "0", 10);
-if (preset && WORDS.some(w => w.l === preset)) startLesson(preset);
+loadProgress(() => {
+  buildLessons();
+  const preset = parseInt(new URLSearchParams(location.search).get("lesson") || "0", 10);
+  if (preset && WORDS.some(w => w.l === preset)) startLesson(preset);
+});
 </script>
 </body>
 </html>
