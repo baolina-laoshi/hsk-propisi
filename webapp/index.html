@@ -28,9 +28,10 @@
   .grid button:active { transform: scale(.96); }
   .grid button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
   .grid button small { font-size: 11px; font-weight: 500; color: var(--hint); margin-top: 2px; }
-  .grid button.full { background: rgba(46,157,87,.16); }
-  .grid button.full small { color: var(--ok); font-weight: 700; }
-  .grid button.part small { color: #c98a16; }
+  .grid button.full { background: var(--ok); color: #fff; }
+  .grid button.full small { color: #fff; font-weight: 700; }
+  .grid button.part { background: #fbe7b5; color: #5c4508; }
+  .grid button.part small { color: #8a6410; font-weight: 600; }
   .legend { color: var(--hint); font-size: 13px; margin-top: 12px; line-height: 1.5; }
   .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
   .back { border: 0; background: none; color: var(--accent); font-size: 15px; padding: 4px 0; }
@@ -71,7 +72,7 @@
     <h1>✍️ Прописи</h1>
     <p class="sub">Выбери урок. Сначала можно посмотреть порядок черт, потом написать иероглиф пальцем.</p>
     <div class="grid" id="lessons"></div>
-    <p class="legend">✓ — урок пройден целиком, 5/12 — пройдено 5 слов из 12.</p>
+    <p class="legend">Зелёный ✓ — урок пройден целиком. Жёлтый 5/12 — пройдено 5 слов из 12.</p>
   </section>
 
   <!-- тренировка -->
