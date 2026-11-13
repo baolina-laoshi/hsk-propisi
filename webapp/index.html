@@ -42,7 +42,10 @@
   .chars { display: flex; justify-content: center; gap: 6px; margin: 8px 0 12px; }
   .chars span { min-width: 36px; height: 36px; border-radius: 8px; background: var(--card);
     display: grid; place-items: center; font-size: 20px; color: var(--hint); }
+  .chars span { cursor: pointer; }
   .chars span.cur { outline: 2px solid var(--accent); color: var(--text); }
+  .reset { display: block; margin: 18px auto 0; border: 0; background: none; color: var(--hint);
+    font-size: 14px; text-decoration: underline; }
   .chars span.ok { color: var(--ok); }
   .chars span.bad { color: var(--bad); }
   .pad { position: relative; width: min(300px, 82vw); aspect-ratio: 1; margin: 0 auto;
@@ -73,6 +76,7 @@
     <p class="sub">Выбери урок. Сначала можно посмотреть порядок черт, потом написать иероглиф пальцем.</p>
     <div class="grid" id="lessons"></div>
     <p class="legend">Зелёный ✓ — урок пройден целиком. Жёлтый 5/12 — пройдено 5 слов из 12.</p>
+    <button class="reset" id="reset">Сбросить отметки и начать заново</button>
   </section>
 
   <!-- тренировка -->
@@ -86,6 +90,7 @@
       <div class="py" id="py"></div>
     </div>
     <div class="chars" id="chars"></div>
+    <p class="note" id="chars-hint" style="margin:-4px 0 8px"></p>
     <div class="pad">
       <svg class="guide" viewBox="0 0 100 100" preserveAspectRatio="none">
         <g stroke="currentColor" stroke-width=".4" stroke-dasharray="2 2" fill="none" opacity=".35">
@@ -204,8 +209,6 @@ function openWord() {
   $("count").textContent = `${wi + 1} из ${list.length}`;
   $("tr").textContent = w.t;
   $("py").textContent = w.p;
-  $("next").disabled = true;
-  $("next").textContent = wi + 1 < list.length ? "Дальше →" : "Итог";
   drawChars();
   startChar();
 }
@@ -217,10 +220,27 @@ function drawChars() {
     const s = document.createElement("span");
     const st = charState[i];
     s.textContent = st.done ? ch : "·";
-    if (i === ci && !st.done) s.className = "cur";
-    else if (st.done) s.className = st.mistakes < OK_LIMIT ? "ok" : "bad";
+    s.className = st.done ? (st.mistakes < OK_LIMIT ? "ok" : "bad") : "";
+    if (i === ci) s.className += " cur";
+    s.onclick = () => { if (i !== ci || st.done) { writer && writer.cancelQuiz(); ci = i; drawChars(); startChar(); } };
     $("chars").appendChild(s);
   });
+  $("chars-hint").textContent = chars.length > 1 ? "Нажми на клетку, чтобы переписать этот иероглиф." : "";
+  updateNext();
+}
+
+// кнопка внизу: следующий иероглиф слова или следующее слово
+function updateNext() {
+  const chars = cjk(list[wi].h);
+  const allDone = charState.every(s => s.done);
+  const nextUndone = charState.findIndex((s, i) => i > ci && !s.done);
+  if (!allDone && nextUndone !== -1) {
+    $("next").textContent = "Следующий иероглиф →";
+    $("next").disabled = !charState[ci].done;
+  } else {
+    $("next").textContent = wi + 1 < list.length ? "Дальше →" : "Итог";
+    $("next").disabled = !allDone;
+  }
 }
 
 function makeWriter(ch) {
@@ -246,21 +266,25 @@ function startChar() {
 }
 
 function quiz() {
-  const st = charState[ci];
-  st.mistakes = 0;
+  const st = charState[ci], me = ci, word = wi;
+  let mistakes = 0;
   writer.quiz({
-    onMistake: () => { st.mistakes++; if (st.mistakes === HINT_AFTER) setMsg("Подсказка: смотри на подсвеченную черту.", "bad"); },
+    onMistake: () => { mistakes++; if (mistakes === HINT_AFTER) setMsg("Подсказка: смотри на подсвеченную черту.", "bad"); },
     onComplete: () => {
+      if (me !== ci || word !== wi) return;   // уже перешли к другому иероглифу
       st.done = true;
-      const good = st.mistakes < OK_LIMIT;
-      setMsg(good ? "✅ Отлично!" : `Получилось, ошибок: ${st.mistakes}. Попробуй ещё раз или иди дальше.`, good ? "ok" : "bad");
+      st.mistakes = mistakes;
+      const good = mistakes < OK_LIMIT;
       if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(good ? "success" : "warning");
-      drawChars();
-      const chars = cjk(list[wi].h);
-      if (ci + 1 < chars.length) {
-        setTimeout(() => { ci++; drawChars(); startChar(); }, 900);
+      const nextUndone = charState.findIndex((s, i) => i > ci && !s.done);
+      if (good) {
+        setMsg("✅ Отлично!", "ok");
+        drawChars();
+        // без ошибок — сразу к следующему иероглифу слова
+        if (nextUndone !== -1) setTimeout(() => { if (me === ci && word === wi) { ci = nextUndone; drawChars(); startChar(); } }, 900);
       } else {
-        $("next").disabled = false;
+        setMsg(`Ошибок: ${mistakes}. Нажми «↺ Заново», чтобы переписать, или иди дальше.`, "bad");
+        drawChars();
       }
     },
   });
@@ -282,8 +306,20 @@ $("show").onclick = () => {
     writer.hideCharacter(); setMsg("Теперь напиши сам."); quiz();
   }, 600) });
 };
-$("again").onclick = () => { charState[ci].done = false; writer.cancelQuiz(); startChar(); drawChars(); $("next").disabled = true; };
-$("next").onclick = () => { saveWord(); wi++; wi < list.length ? openWord() : finish(); };
+$("again").onclick = () => { writer.cancelQuiz(); startChar(); drawChars(); };
+$("next").onclick = () => {
+  const nextUndone = charState.findIndex((s, i) => i > ci && !s.done);
+  if (!charState.every(s => s.done) && nextUndone !== -1) { writer.cancelQuiz(); ci = nextUndone; drawChars(); startChar(); return; }
+  saveWord(); wi++; wi < list.length ? openWord() : finish();
+};
+
+// сброс отметок о пройденных уроках
+$("reset").onclick = () => {
+  const doReset = () => { progress = {}; saveProgress(() => buildLessons()); buildLessons(); };
+  const q = "Сбросить отметки всех уроков? Прописи можно будет пройти заново с нуля.";
+  if (tg && tg.showConfirm && tg.isVersionAtLeast && tg.isVersionAtLeast("6.2")) tg.showConfirm(q, ok => { if (ok) doReset(); });
+  else if (window.confirm(q)) doReset();
+};
 $("finish").onclick = () => { if (charState.every(s => s.done)) saveWord(); finish(); };
 $("to-lessons").onclick = () => { if (writer) writer.cancelQuiz(); buildLessons(); show("s-lessons"); };
 $("restart").onclick = () => { buildLessons(); show("s-lessons"); };
